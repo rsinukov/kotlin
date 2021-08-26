@@ -587,10 +587,7 @@ constructor(
         @Input get() = binary.linkerOpts
 
     val binaryOptions: Map<String, String>
-        @Input get() = binary.binaryOptions
-
-    val projectWideBinaryOptions: Map<String, String>
-        @Input get() = PropertiesProvider(project).nativeBinaryOptions
+        @Input get() = PropertiesProvider(project).nativeBinaryOptions + binary.binaryOptions
 
     val processTests: Boolean
         @Input get() = binary is TestExecutable
@@ -635,7 +632,7 @@ constructor(
         linkerOpts.forEach {
             addArg("-linker-option", it)
         }
-        (projectWideBinaryOptions + binaryOptions).forEach { (name, value) ->
+        binaryOptions.forEach { (name, value) ->
             add("-Xbinary=$name=$value")
         }
         exportLibraries.files.filterKlibsPassedToCompiler().forEach {
