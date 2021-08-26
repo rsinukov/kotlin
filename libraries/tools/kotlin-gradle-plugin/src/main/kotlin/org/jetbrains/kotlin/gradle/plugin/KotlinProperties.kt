@@ -255,6 +255,16 @@ internal class PropertiesProvider private constructor(private val project: Proje
         get() = booleanProperty("kotlin.native.disableCompilerDaemon")
 
     /**
+     * Allows a user to set project-wide options that will be passed to the K/N compiler via -Xbinary flag.
+     * E.g. setting kotlin.native.binary.memoryModel=experimental results in passing -Xbinary=memoryModel=experimental to the compiler.
+     * @return Map: property name without `kotlin.native.binary.` prefix -> property value
+     */
+    val nativeBinaryOptions: Map<String, String>
+        get() = propertiesWithPrefix(KOTLIN_NATIVE_BINARY_OPTION_PREFIX).mapKeys { (key, _) ->
+            key.removePrefix(KOTLIN_NATIVE_BINARY_OPTION_PREFIX)
+        }
+
+    /**
      * Allows a user to specify additional arguments of a JVM executing KLIB commonizer.
      */
     val commonizerJvmArgs: String?
@@ -383,6 +393,22 @@ internal class PropertiesProvider private constructor(private val project: Proje
             localProperties.getProperty(propName)
         }
 
+    private fun propertiesWithPrefix(prefix: String): Map<String, String> {
+        val result = mutableMapOf<String, String>()
+        project.properties.forEach { (name, value) ->
+            if (name.startsWith(prefix) && value is String) {
+                result.put(name, value)
+            }
+        }
+        localProperties.forEach { (name, value) ->
+            if (name is String && name.startsWith(prefix) && value is String) {
+                // Project properties have higher priority.
+                result.putIfAbsent(name, value)
+            }
+        }
+        return result
+    }
+
     internal object PropertyNames {
         internal const val KOTLIN_MPP_ENABLE_GRANULAR_SOURCE_SETS_METADATA = "kotlin.mpp.enableGranularSourceSetsMetadata"
         internal const val KOTLIN_MPP_HIERARCHICAL_STRUCTURE_SUPPORT = "kotlin.mpp.hierarchicalStructureSupport"
@@ -395,6 +421,8 @@ internal class PropertiesProvider private constructor(private val project: Proje
         private const val CACHED_PROVIDER_EXT_NAME = "kotlin.properties.provider"
 
         internal const val KOTLIN_NATIVE_IGNORE_INCORRECT_DEPENDENCIES = "kotlin.native.ignoreIncorrectDependencies"
+
+        private const val KOTLIN_NATIVE_BINARY_OPTION_PREFIX = "kotlin.native.binary."
 
         operator fun invoke(project: Project): PropertiesProvider =
             with(project.extensions.extraProperties) {
