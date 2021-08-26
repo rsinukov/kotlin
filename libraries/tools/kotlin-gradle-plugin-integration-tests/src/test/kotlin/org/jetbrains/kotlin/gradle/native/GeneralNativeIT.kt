@@ -950,14 +950,14 @@ class GeneralNativeIT : BaseGradleIT() {
 
     @Test
     fun testNativeArgsWithSpaces() = with(transformNativeTestProject("sample-lib", directoryPrefix = "new-mpp-lib-and-app")) {
-        val compilcatedDirectoryName = if (HostManager.hostIsMingw) {
+        val complicatedDirectoryName = if (HostManager.hostIsMingw) {
             // Windows doesn't allow creating a file with " in its name.
             "path with spaces"
         } else {
             "path with spaces and \""
         }
 
-        val fileWithSpacesInPath = projectDir.resolve("src/commonMain/kotlin/$compilcatedDirectoryName")
+        val fileWithSpacesInPath = projectDir.resolve("src/commonMain/kotlin/$complicatedDirectoryName")
             .apply { mkdirs() }
             .resolve("B.kt")
         fileWithSpacesInPath.writeText("fun foo() = 42")
@@ -976,6 +976,51 @@ class GeneralNativeIT : BaseGradleIT() {
                         Arguments: ${arguments.joinToString(separator = " ")}
                     """.trimIndent()
                 )
+            }
+        }
+    }
+
+    @Test
+    fun testBinaryOptionsDSL() = with(transformNativeTestProjectWithPluginDsl("executables", directoryPrefix = "native-binaries")) {
+        gradleBuildScript().appendText(
+            """
+                kotlin.targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget::class.java) {
+                    binaries.all { binaryOptions["memoryModel"] = "experimental" }
+                }
+            """.trimIndent()
+        )
+        build(":linkDebugExecutableHost") {
+            assertSuccessful()
+            checkNativeCommandLineArguments(":linkDebugExecutableHost") {
+                it.contains("-Xbinary=memoryModel=experimental")
+            }
+        }
+    }
+
+    @Test
+    fun testBinaryOptionsProperty() = with(transformNativeTestProjectWithPluginDsl("executables", directoryPrefix = "native-binaries")) {
+        build(":linkDebugExecutableHost", "-Pkotlin.native.binary.memoryModel=experimental") {
+            assertSuccessful()
+            checkNativeCommandLineArguments(":linkDebugExecutableHost") {
+                it.contains("-Xbinary=memoryModel=experimental")
+            }
+        }
+    }
+
+    @Test
+    fun testBinaryOptionsPriority() = with(transformNativeTestProjectWithPluginDsl("executables", directoryPrefix = "native-binaries")) {
+        gradleBuildScript().appendText(
+            """
+                kotlin.targets.withType(org.jetbrains.kotlin.gradle.plugin.mpp.KotlinNativeTarget::class.java) {
+                    binaries.all { binaryOptions["memoryModel"] = "experimental" }
+                }
+            """.trimIndent()
+        )
+        build(":linkDebugExecutableHost", "-Pkotlin.native.binary.memoryModel=strict") {
+            assertSuccessful()
+            checkNativeCommandLineArguments(":linkDebugExecutableHost") {
+                // Options set in the DSL have higher priority than options set in project properties.
+                it.contains("-Xbinary=memoryModel=experimental")
             }
         }
     }
