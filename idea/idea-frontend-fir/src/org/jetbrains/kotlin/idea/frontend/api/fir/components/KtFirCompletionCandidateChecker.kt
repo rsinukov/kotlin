@@ -26,6 +26,7 @@ import org.jetbrains.kotlin.idea.frontend.api.fir.symbols.KtFirSymbol
 import org.jetbrains.kotlin.idea.frontend.api.fir.utils.weakRef
 import org.jetbrains.kotlin.idea.frontend.api.symbols.KtCallableSymbol
 import org.jetbrains.kotlin.idea.frontend.api.tokens.ValidityToken
+import org.jetbrains.kotlin.idea.frontend.api.types.KtSubstitutor
 import org.jetbrains.kotlin.idea.frontend.api.withValidityAssertion
 import org.jetbrains.kotlin.psi.KtExpression
 import org.jetbrains.kotlin.psi.KtFile
@@ -70,17 +71,18 @@ internal class KtFirCompletionCandidateChecker(
                 explicitReceiver = explicitReceiverExpression
             )
             resolver.resolveSingleCandidate(resolutionParameters)?.let {
+                val substitutor = it.createSubstitutorFromTypeArguments() ?: return@let null
                 return when {
                     candidateSymbol is FirVariable && candidateSymbol.returnTypeRef.coneType.receiverType(rootModuleSession) != null -> {
-                        KtExtensionApplicabilityResult.ApplicableAsFunctionalVariableCall
+                        KtExtensionApplicabilityResult.ApplicableAsFunctionalVariableCall(substitutor)
                     }
                     else -> {
-                        KtExtensionApplicabilityResult.ApplicableAsExtensionCallable
+                        KtExtensionApplicabilityResult.ApplicableAsExtensionCallable(substitutor)
                     }
                 }
             }
         }
-        return KtExtensionApplicabilityResult.NonApplicable
+        return KtExtensionApplicabilityResult.NonApplicable(KtSubstitutor.Empty(token))
     }
 
     private fun getImplicitReceivers(fakeNameExpression: KtSimpleNameExpression): Sequence<ImplicitReceiverValue<*>?> {
