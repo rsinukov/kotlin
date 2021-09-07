@@ -10,6 +10,7 @@ import org.jetbrains.kotlin.descriptors.Visibility
 import org.jetbrains.kotlin.fir.declarations.*
 import org.jetbrains.kotlin.fir.declarations.utils.*
 import org.jetbrains.kotlin.fir.expressions.FirPropertyAccessExpression
+import org.jetbrains.kotlin.fir.expressions.FirVariableAssignment
 import org.jetbrains.kotlin.fir.references.FirSuperReference
 import org.jetbrains.kotlin.fir.resolve.*
 import org.jetbrains.kotlin.fir.resolve.calls.Candidate
@@ -19,7 +20,8 @@ import org.jetbrains.kotlin.fir.resolve.calls.ReceiverValue
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
 import org.jetbrains.kotlin.fir.symbols.FirBasedSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.*
-import org.jetbrains.kotlin.fir.types.*
+import org.jetbrains.kotlin.fir.types.ConeClassLikeType
+import org.jetbrains.kotlin.fir.types.coneType
 import org.jetbrains.kotlin.name.ClassId
 import org.jetbrains.kotlin.name.FqName
 import org.jetbrains.kotlin.types.AbstractTypeChecker
@@ -45,7 +47,8 @@ abstract class FirVisibilityChecker : FirSessionComponent {
             useSiteFile: FirFile,
             containingDeclarations: List<FirDeclaration>,
             dispatchReceiver: ReceiverValue?,
-            session: FirSession
+            session: FirSession,
+            isCallToPropertySetter: Boolean,
         ): Boolean {
             return true
         }
@@ -65,7 +68,14 @@ abstract class FirVisibilityChecker : FirSessionComponent {
         val containingDeclarations = callInfo.containingDeclarations
         val session = callInfo.session
 
-        return isVisible(declaration, session, useSiteFile, containingDeclarations, candidate.dispatchReceiverValue)
+        return isVisible(
+            declaration,
+            session,
+            useSiteFile,
+            containingDeclarations,
+            candidate.dispatchReceiverValue,
+            candidate.callInfo.callSite is FirVariableAssignment
+        )
     }
 
     fun isVisible(
@@ -73,7 +83,8 @@ abstract class FirVisibilityChecker : FirSessionComponent {
         session: FirSession,
         useSiteFile: FirFile,
         containingDeclarations: List<FirDeclaration>,
-        dispatchReceiver: ReceiverValue?
+        dispatchReceiver: ReceiverValue?,
+        isCallToPropertySetter: Boolean = false,
     ): Boolean {
         require(declaration is FirDeclaration)
         val provider = session.firProvider
@@ -119,7 +130,7 @@ abstract class FirVisibilityChecker : FirSessionComponent {
                 ownerId != null && canSeeProtectedMemberOf(
                     containingDeclarations, dispatchReceiver, ownerId, session,
                     isVariableOrNamedFunction = symbol is FirVariableSymbol || symbol is FirNamedFunctionSymbol
-                )
+                ) == CanSeeProtectedMemberResult.CAN_SEE
             }
 
             else -> platformVisibilityCheck(
@@ -128,7 +139,8 @@ abstract class FirVisibilityChecker : FirSessionComponent {
                 useSiteFile,
                 containingDeclarations,
                 dispatchReceiver,
-                session
+                session,
+                isCallToPropertySetter,
             )
         }
     }
@@ -139,7 +151,8 @@ abstract class FirVisibilityChecker : FirSessionComponent {
         useSiteFile: FirFile,
         containingDeclarations: List<FirDeclaration>,
         dispatchReceiver: ReceiverValue?,
-        session: FirSession
+        session: FirSession,
+        isCallToPropertySetter: Boolean,
     ): Boolean
 
     private fun canSeePrivateMemberOf(
@@ -183,15 +196,16 @@ abstract class FirVisibilityChecker : FirSessionComponent {
         ownerLookupTag: ConeClassLikeLookupTag,
         session: FirSession,
         isVariableOrNamedFunction: Boolean
-    ): Boolean {
+    ): CanSeeProtectedMemberResult {
         dispatchReceiver?.ownerIfCompanion(session)?.let { companionOwnerLookupTag ->
-            if (containingUseSiteClass.isSubClass(companionOwnerLookupTag, session)) return true
+            if (containingUseSiteClass.isSubClass(companionOwnerLookupTag, session)) return CanSeeProtectedMemberResult.CAN_SEE
         }
 
         return when {
-            !containingUseSiteClass.isSubClass(ownerLookupTag, session) -> false
-            isVariableOrNamedFunction -> doesReceiverFitForProtectedVisibility(dispatchReceiver, containingUseSiteClass, session)
-            else -> true
+            !containingUseSiteClass.isSubClass(ownerLookupTag, session) -> CanSeeProtectedMemberResult.CAN_NOT_SEE_BECAUSE_NOT_SUBCLASS
+            isVariableOrNamedFunction && !doesReceiverFitForProtectedVisibility(dispatchReceiver, containingUseSiteClass, session) ->
+                CanSeeProtectedMemberResult.CAN_NOT_SEE_BECAUSE_RECEIVER_NOT_FIT
+            else -> CanSeeProtectedMemberResult.CAN_SEE
         }
     }
 
@@ -239,22 +253,37 @@ abstract class FirVisibilityChecker : FirSessionComponent {
                 (name == "monitorEnter" || name == "monitorExit")
     }
 
+    protected enum class CanSeeProtectedMemberResult {
+        CAN_SEE,
+        CAN_NOT_SEE_BECAUSE_RECEIVER_NOT_FIT,
+        CAN_NOT_SEE_BECAUSE_NOT_SUBCLASS,
+    }
+
     protected fun canSeeProtectedMemberOf(
         containingDeclarationOfUseSite: List<FirDeclaration>,
         dispatchReceiver: ReceiverValue?,
         ownerLookupTag: ConeClassLikeLookupTag,
         session: FirSession,
         isVariableOrNamedFunction: Boolean
-    ): Boolean {
-        if (canSeePrivateMemberOf(containingDeclarationOfUseSite, ownerLookupTag, session)) return true
+    ): CanSeeProtectedMemberResult {
+        if (canSeePrivateMemberOf(containingDeclarationOfUseSite, ownerLookupTag, session)) return CanSeeProtectedMemberResult.CAN_SEE
+        var result = CanSeeProtectedMemberResult.CAN_NOT_SEE_BECAUSE_NOT_SUBCLASS
 
         for (containingDeclaration in containingDeclarationOfUseSite) {
             if (containingDeclaration !is FirClass) continue
             val boundSymbol = containingDeclaration.symbol
-            if (canSeeProtectedMemberOf(boundSymbol.fir, dispatchReceiver, ownerLookupTag, session, isVariableOrNamedFunction)) return true
+            val newResult = canSeeProtectedMemberOf(
+                boundSymbol.fir,
+                dispatchReceiver,
+                ownerLookupTag,
+                session,
+                isVariableOrNamedFunction
+            )
+            if (newResult < result) result = newResult
+            if (result == CanSeeProtectedMemberResult.CAN_SEE) break
         }
 
-        return false
+        return result
     }
 
     protected fun FirBasedSymbol<*>.packageFqName(): FqName {
