@@ -329,11 +329,12 @@ internal class BlockGenerator(private val codegen: CodeGenerator) {
 
             val copiedBlock = callFromBridge(retainBlock, listOf(bitcast(int8TypePtr, blockOnStack)))
 
-            val autoreleaseReturnValue = context.llvm.externalFunction(
+            val autoreleaseReturnValue = context.llvm.externalFunction(LlvmFunction(
                     "objc_autoreleaseReturnValue",
-                    functionType(int8TypePtr, false, int8TypePtr),
-                    CurrentKlibModuleOrigin
-            )
+                    AttributedLlvmType(int8TypePtr),
+                    listOf(AttributedLlvmType(int8TypePtr)),
+                    origin = CurrentKlibModuleOrigin
+            ))
 
             ret(callFromBridge(autoreleaseReturnValue, listOf(copiedBlock)))
         }.also {
@@ -342,8 +343,9 @@ internal class BlockGenerator(private val codegen: CodeGenerator) {
     }
 }
 
-private val ObjCExportCodeGeneratorBase.retainBlock get() = context.llvm.externalFunction(
+private val ObjCExportCodeGeneratorBase.retainBlock get() = context.llvm.externalFunction(LlvmFunction(
         "objc_retainBlock",
-        functionType(int8TypePtr, false, int8TypePtr),
-        CurrentKlibModuleOrigin
-)
+        AttributedLlvmType(int8TypePtr),
+        listOf(AttributedLlvmType(int8TypePtr)),
+        origin = CurrentKlibModuleOrigin
+))
