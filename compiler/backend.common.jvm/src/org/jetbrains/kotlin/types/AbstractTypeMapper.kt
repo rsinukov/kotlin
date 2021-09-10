@@ -76,6 +76,10 @@ object AbstractTypeMapper {
             }
         }
 
+        if (type.isFlexible()) {
+            return mapType(context, type.upperBoundIfFlexible(), mode, sw)
+        }
+
         val typeConstructor = type.typeConstructor()
 
         when {
