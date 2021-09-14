@@ -5212,7 +5212,10 @@ if (isAppleTarget(project)) {
             // Check bundle ID.
             final String frameworkPath = "$dir/$target/${frameworkName}.framework"
             final Pattern pattern = ~"<key>CFBundleIdentifier</key>\n\\s*<string>foo.bar</string>"
-            final String plistContent = file("$frameworkPath/Resources/Info.plist").text
+            final String plistPath = (target.family == Family.OSX) ?
+                    "$frameworkPath/Resources/Info.plist" :
+                    "$frameworkPath/Info.plist"
+            final String plistContent = file(plistPath).text
             if (!pattern.matcher(plistContent).find()) {
                 throw new Error("Unexpected Info.plist content:\n$plistContent")
             }
