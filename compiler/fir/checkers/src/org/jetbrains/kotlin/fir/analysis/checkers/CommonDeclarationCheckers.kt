@@ -64,6 +64,7 @@ object CommonDeclarationCheckers : DeclarationCheckers() {
     override val backingFieldCheckers: Set<FirBackingFieldChecker>
         get() = setOf(
             FirExplicitBackingFieldForbiddenChecker,
+            FirExplicitBackingFieldsUnsupportedChecker,
         )
 
     override val classCheckers: Set<FirClassChecker>
