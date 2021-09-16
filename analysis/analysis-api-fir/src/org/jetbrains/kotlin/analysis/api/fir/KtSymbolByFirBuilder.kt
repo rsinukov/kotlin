@@ -20,7 +20,6 @@ import org.jetbrains.kotlin.fir.resolve.getSymbolByLookupTag
 import org.jetbrains.kotlin.fir.resolve.symbolProvider
 import org.jetbrains.kotlin.fir.symbols.ConeClassLikeLookupTag
 import org.jetbrains.kotlin.fir.symbols.ConeTypeParameterLookupTag
-import org.jetbrains.kotlin.fir.symbols.impl.FirBackingFieldSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirClassifierSymbol
 import org.jetbrains.kotlin.fir.symbols.impl.FirTypeParameterSymbol
 import org.jetbrains.kotlin.fir.types.*
@@ -83,7 +82,6 @@ internal class KtSymbolByFirBuilder private constructor(
         filesCache = BuilderCache(),
     )
 
-
     fun createReadOnlyCopy(newResolveState: FirModuleResolveState): KtSymbolByFirBuilder {
         check(!withReadOnlyCaching) { "Cannot create readOnly KtSymbolByFirBuilder from a readonly one" }
         return KtSymbolByFirBuilder(
@@ -98,7 +96,6 @@ internal class KtSymbolByFirBuilder private constructor(
         )
     }
 
-
     fun buildSymbol(fir: FirDeclaration): KtSymbol {
         return when (fir) {
             is FirClassLikeDeclaration -> classifierBuilder.buildClassLikeSymbol(fir)
@@ -108,11 +105,9 @@ internal class KtSymbolByFirBuilder private constructor(
         }
     }
 
-
     fun buildEnumEntrySymbol(fir: FirEnumEntry) = symbolsCache.cache(fir) { KtFirEnumEntrySymbol(fir, resolveState, token, this) }
 
-
-    fun buildFileSymbol(fir: FirFile) = filesCache.cache(fir) { KtFirFileSymbol(fir, resolveState, token) }
+    fun buildFileSymbol(fir: FirFile) = filesCache.cache(fir) { KtFirFileSymbol(fir, resolveState, token, this) }
 
     private val packageProvider = project.createPackageProvider(GlobalSearchScope.allScope(project))//todo scope
 
