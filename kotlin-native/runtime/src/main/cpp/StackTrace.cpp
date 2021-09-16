@@ -137,7 +137,6 @@ KStdVector<KStdString> kotlin::GetStackTraceStrings(void* const* stackTrace, siz
                 symbol_[0] = '\0';
             }
             const char* symbol = symbol_;
-            const char* binary = "";
 #else
             const char* symbol = symbols[index];
             // On MacOs symbol name contain index, executable file containing symbol and address
