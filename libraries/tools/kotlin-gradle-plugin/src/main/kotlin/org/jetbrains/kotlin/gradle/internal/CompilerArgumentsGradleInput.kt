@@ -29,7 +29,11 @@ internal object CompilerArgumentsGradleInput {
             } +
                     (CommonToolArguments::freeArgs as KProperty1<T, *>)
 
-        val filteredProperties = argumentProperties.filterNot { it in ignoredProperties }
+        val filteredProperties = argumentProperties
+            .filterNot { prop ->
+                // To also exclude overridden properties that are defined as the parent, for example 'verbose'
+                ignoredProperties.any { prop.name == it.name }
+            }
 
         fun inputItem(property: KProperty1<out T, *>): Pair<String, String> {
             @Suppress("UNCHECKED_CAST")
